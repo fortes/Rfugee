@@ -1,11 +1,13 @@
 import settings
 
-import flickrapi
 import json
 import os.path
 import sqlite3
 import sys
 import time
+
+sys.path.insert(1,'lib')
+import flickrapi
 
 def get_flickr():
     """Connect to flickr, prompting the user to authorize if necessary"""
