@@ -68,7 +68,7 @@ def populate_photos(flickr, db):
 
     # Query flickr a bunch of times to get the info we need
     while not total_pages or page_number <= total_pages:
-        sys.stdout.write("\rFetching page %s of %s ..." % (page_number, total_pages))
+        sys.stdout.write("\rFetching page %s of %s ...      " % (page_number, total_pages or '?'))
         sys.stdout.flush()
 
         search_res = json.loads(
@@ -84,7 +84,7 @@ def populate_photos(flickr, db):
         pic_tuples = [(photo['id'], photo['url_o'], photo['media'], json.dumps(photo)) for photo in pics_arr]
 
         # Write records into database
-        db.executemany('INSERT INTO photos(id, img_url, media, json_data) VALUES(?, ?,?,?)', pic_tuples)
+        db.executemany('INSERT INTO photos(id, img_url, media, json_data) VALUES(?,?,?,?)', pic_tuples)
 
         # Collect latest
         photos += pic_tuples
@@ -92,7 +92,7 @@ def populate_photos(flickr, db):
         # Increment
         page_number += 1
 
-    sys.stdout.write('\rFetched all %s pages of info      \n' % page_number)
+    sys.stdout.write("\n\rFetched all %s pages of info      \n" % page_number)
     sys.stdout.flush()
 
     # Save out to disk
