@@ -5,6 +5,8 @@ import os.path
 import sqlite3
 import sys
 import time
+import urllib2
+import urlparse
 
 sys.path.insert(1,'lib')
 import flickrapi
@@ -86,9 +88,6 @@ def populate_photos(flickr, db):
         # Write records into database
         db.executemany('INSERT INTO photos(id, img_url, media, json_data) VALUES(?,?,?,?)', pic_tuples)
 
-        # Collect latest
-        photos += pic_tuples
-
         # Increment
         page_number += 1
 
@@ -118,16 +117,51 @@ def get_photo_list(flickr, db):
 
 def download_photos(photos):
     """Downloads a list of photos to disk"""
-    sys.stdout.write('%s photos to download' % len(photos))
+
+    sys.stdout.write("%s photos to download\n" % len(photos))
     sys.stdout.flush()
 
-    for photo in photos:
-        # Download original file
-        # Add geodata
-        # Add tag data
-        # Other flickr-specific data?
-        # Write file out in picasa-like directory structure?
-        pass
+    photo_count = len(photos)
+
+    for index, photo in enumerate(photos):
+        json_info = json.loads(photo[3])
+        url = photo[1] # URL
+        filename = os.path.basename(urlparse.urlparse(url).path)
+        folderpath = os.path.join(settings.photo_root, json_info['datetaken'][:10])
+        # Create folder, if not there
+        if not os.path.exists(folderpath):
+            os.makedirs(folderpath)
+        filepath = os.path.join(folderpath, filename)
+        sys.stdout.write("\rDownloading file %s of %s [%s]" % (index + 1, photo_count, filepath))
+        sys.stdout.flush()
+
+        try:
+            # Download File
+            remote_image = urllib2.urlopen(url)
+            image_data = remote_image.read()
+            # Save File
+            image_file = open(filepath, 'wb')
+            image_file.write(image_data)
+            image_file.close()
+            # Save path into db
+            db.execute('UPDATE photos SET saved_path=?,downloaded=1 WHERE id=?', (filepath, photo[0]))
+            db.commit()
+
+
+            # Add geodata
+            # Add tag data
+            # Other flickr-specific data? (id, url)
+            # Write file out in picasa-like directory structure?
+            # Mark as downloaded
+            pass
+
+        except:
+            sys.stdout.write("\r")
+            sys.stdout.flush()
+            sys.stderr.write("Download failed for: %s\n" % url)
+            sys.stderr.flush()
+
+    sys.stdout.write("\n%s photos downloaded\n" % len(photos))
 
 if __name__ == '__main__':
     # Connect to Flickr
