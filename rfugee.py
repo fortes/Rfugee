@@ -58,7 +58,7 @@ def get_database():
 def populate_photos(flickr, db):
     """Return the total number of photos that the user has"""
     # Do one quick request just to get the list of total photos
-    sys.stdout.write("Fetching total photo count from Flickr\n")
+    sys.stdout.write("Fetching list of photos from Flickr\n")
 
     # Flickr begins at 1
     page_number = 1
@@ -109,7 +109,7 @@ def get_photo_list(flickr, db):
     # If this is the first time, then there might not have been any photos
     all_photos = db.execute('SELECT * FROM photos').fetchall()
 
-    if len(photos):
+    if len(all_photos):
         # Great, photos have been fetched before, so we're all good
         return []
 
@@ -181,4 +181,4 @@ if __name__ == '__main__':
 
     db.close()
 
-    print "\nDownload completed"
+    print "\nCompleted"
