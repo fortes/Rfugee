@@ -7,6 +7,9 @@ import sys
 import time
 import urllib2
 import urlparse
+import subprocess
+import shlex
+import pipes
 
 sys.path.insert(1,'lib')
 import flickrapi
@@ -47,8 +50,8 @@ def get_database():
                                             img_url text,
                                             media text,
                                             json_data text,
-                                            fetched integer,
                                             downloaded integer,
+                                            metadata integer,
                                             saved_path text
                     )''')
         conn.commit()
@@ -115,7 +118,7 @@ def get_photo_list(flickr, db):
 
     return populate_photos(flickr, db)
 
-def download_photos(photos):
+def download_photos(photos, db):
     """Downloads a list of photos to disk"""
 
     sys.stdout.write("%s photos to download\n" % len(photos))
@@ -143,17 +146,9 @@ def download_photos(photos):
             image_file = open(filepath, 'wb')
             image_file.write(image_data)
             image_file.close()
-            # Save path into db
+            # Save path into db and mark as downloaded
             db.execute('UPDATE photos SET saved_path=?,downloaded=1 WHERE id=?', (filepath, photo[0]))
             db.commit()
-
-
-            # Add geodata
-            # Add tag data
-            # Other flickr-specific data? (id, url)
-            # Write file out in picasa-like directory structure?
-            # Mark as downloaded
-            pass
 
         except:
             sys.stdout.write("\r")
@@ -162,6 +157,110 @@ def download_photos(photos):
             sys.stderr.flush()
 
     sys.stdout.write("\n%s photos downloaded\n" % len(photos))
+
+base58letters = '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'
+base58len = len(base58letters)
+
+def base58encode(id):
+    """
+    Encoding for Flickr short urls described here:
+    http://www.flickr.com/groups/api/discuss/72157616713786392/
+    """
+    str = ''
+
+    while id >= base58len:
+        div, mod = divmod(id, base58len)
+        str = base58letters[mod] + str
+        id = int(div)
+
+    if (id):
+        str = base58letters[id] + str
+
+    return str
+
+def add_metadata(db):
+    # Only get photos w/o metadata written
+    photos = db.execute('SELECT * FROM photos WHERE metadata IS NULL').fetchall()
+
+    photo_count = len(photos)
+    if not photo_count:
+        print 'No photos need metadata'
+
+    print "%s photos need metadata" % photo_count
+    for index, photo in enumerate(photos):
+        metadata = json.loads(photo[3])
+        # Becomes Caption-Abstract in EXIF
+        title = metadata['title']
+        if metadata['description'] and metadata['description']['_content']:
+            title += ": " + metadata['description']['_content']
+        # Keywords (comma-sep)
+        tags = metadata['tags'].split(' ')
+        # ID in comment
+        id = photo[0]
+        # URL in Source
+        short_url = "http://flic.kr/p/%s" % base58encode(int(id))
+        # DateTimeOriginal
+        date_taken = metadata['datetaken'].replace('-', ':')
+        # Latitude & Longitude
+        latitude = metadata['latitude']
+        longitude = metadata['longitude']
+
+        sys.stdout.write("\rWriting metadata %s of %s [%s]                    " % (index + 1, photo_count, photo[6]))
+        sys.stdout.flush()
+
+        # Run exiftool command
+        cmd = "exiftool -overwrite_original_in_place"
+        if title:
+            cmd += " -description=%s " % pipes.quote(title)
+        if tags and len(tags):
+            for tag in tags:
+                cmd += """ -keywords=%s """ % pipes.quote(tag)
+        cmd += """ -Source=%s """ % pipes.quote(short_url)
+        cmd += """ -Comment="Flickr ID: %s" """ % id
+        cmd += """ -DateTimeOriginal=%s """ % pipes.quote(date_taken)
+        if latitude and longitude:
+            if latitude > 0:
+                cmd += """ -gps:GPSLatitudeRef="N" """
+            else:
+                cmd += """ -gps:GPSLatitudeRef="S" """
+            if longitude > 0:
+                cmd += """ -gps:GPSLongitudeRef="E" """
+            else:
+                cmd += """ -gps:GPSLongitudeRef="W" """
+
+            cmd += """ -gpslatitude="%s" """ % abs(latitude)
+            cmd += """ -gpslongitude="%s" """ % abs(longitude)
+
+        # Privacy
+        if metadata['ispublic']:
+            cmd += ' -keywords="privacy:public"'
+        elif not (metadata['isfriend'] or metadata['isfamily']):
+            cmd += ' -keywords="privacy:private"'
+        else:
+            if metadata['isfriend']:
+                cmd += ' -keywords="privacy:friend"'
+            if metadata['isfamily']:
+                cmd += ' -keywords="privacy:family"'
+
+        # Add filename
+        cmd += """ %s """ % photo[6]
+
+        # Run command
+        try:
+            fnull = open(os.devnull, 'w')
+            subprocess.call(cmd, shell=True, stdout=fnull, stderr=fnull)
+            fnull.close()
+
+            # Save path into db and mark as metadata'd
+            db.execute('UPDATE photos SET metadata=1 WHERE id=?', [photo[0]])
+            db.commit()
+        except sqlite3.ProgrammingError as e:
+            print e
+            print photo[0]
+        except:
+            sys.stderr.write("\rMetadata failed for: %s                \n" % photo[6])
+            sys.stderr.write("%s\n\r" % sys.exc_info()[0])
+            sys.stderr.flush()
 
 if __name__ == '__main__':
     # Connect to Flickr
@@ -175,9 +274,12 @@ if __name__ == '__main__':
 
     # Do the actual downloading
     if len(photos):
-        download_photos(photos)
+        download_photos(photos, db)
     else:
         print "No photos left to download"
+
+    # Now add metadata
+    add_metadata(db)
 
     db.close()
 
