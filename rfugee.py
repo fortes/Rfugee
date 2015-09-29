@@ -13,6 +13,7 @@ import pipes
 
 sys.path.insert(1,'lib')
 import flickrapi
+import webbrowser
 
 def get_flickr():
     """Connect to flickr, prompting the user to authorize if necessary"""
@@ -21,13 +22,21 @@ def get_flickr():
                                  format='json')
 
     # Check for permissions
-    (token, frob) = flickr.get_token_part_one(perms='read')
+    if not flickr.token_valid(perms=u'read'):
+        # Get a request token
+        flickr.get_request_token(oauth_callback='oob')
 
-    if not token:
-        raw_input('Press ENTER once you have authorized the program')
+        # Open a browser at the authentication URL. Do this however
+        # you want, as long as the user visits that URL.
+        authorize_url = flickr.auth_url(perms=u'read')
+        webbrowser.open_new_tab(authorize_url)
 
-    # Complete
-    flickr.get_token_part_two((token, frob))
+        # Get the verifier code from the user. Do this however you
+        # want, as long as the user gives the application the code.
+        verifier = unicode(raw_input('Verifier code: '))
+
+        # Trade the request token for an access token
+        flickr.get_access_token(verifier)
 
     return flickr
 
@@ -86,7 +95,7 @@ def populate_photos(flickr, db):
             total_pages = search_res['photos']['pages']
 
         pics_arr = search_res['photos']['photo']
-        pic_tuples = [(photo['id'], photo['url_o'], photo['media'], json.dumps(photo)) for photo in pics_arr]
+        pic_tuples = [(photo['id'], photo['url_o'], photo['media'], json.dumps(photo)) for photo in pics_arr if 'url_o' in photo]
 
         # Write records into database
         db.executemany('INSERT INTO photos(id, img_url, media, json_data) VALUES(?,?,?,?)', pic_tuples)
@@ -228,8 +237,8 @@ def add_metadata(db):
             else:
                 cmd += """ -gps:GPSLongitudeRef="W" """
 
-            cmd += """ -gpslatitude="%s" """ % abs(latitude)
-            cmd += """ -gpslongitude="%s" """ % abs(longitude)
+            cmd += """ -gpslatitude="%s" """ % abs(float(latitude))
+            cmd += """ -gpslongitude="%s" """ % abs(float(longitude))
 
         # Privacy
         if metadata['ispublic']:
