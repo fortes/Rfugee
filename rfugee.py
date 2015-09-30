@@ -228,6 +228,8 @@ def add_metadata(db):
         cmd += """ -Comment="Flickr ID: %s" """ % id
         cmd += """ -DateTimeOriginal=%s """ % pipes.quote(date_taken)
         if latitude and longitude:
+            latitude = float(metadata['latitude'])
+            longitude = float(metadata['longitude'])
             if latitude > 0:
                 cmd += """ -gps:GPSLatitudeRef="N" """
             else:
@@ -237,8 +239,8 @@ def add_metadata(db):
             else:
                 cmd += """ -gps:GPSLongitudeRef="W" """
 
-            cmd += """ -gpslatitude="%s" """ % abs(float(latitude))
-            cmd += """ -gpslongitude="%s" """ % abs(float(longitude))
+            cmd += """ -gpslatitude="%s" """ % abs(latitude)
+            cmd += """ -gpslongitude="%s" """ % abs(longitude)
 
         # Privacy
         if metadata['ispublic']:
