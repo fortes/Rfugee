@@ -1,0 +1,8 @@
+import sys; sys.__plen = len(sys.path)
+./flickrapi-2.1.1-py2.7.egg
+./requests_toolbelt-0.4.0-py2.7.egg
+./requests_oauthlib-0.5.0-py2.7.egg
+./requests-2.7.0-py2.7.egg
+./six-1.9.0-py2.7.egg
+./oauthlib-1.0.3-py2.7.egg
+import sys; new=sys.path[sys.__plen:]; del sys.path[sys.__plen:]; p=getattr(sys,'__egginsert',0); sys.path[p:p]=new; sys.__egginsert = p+len(new)

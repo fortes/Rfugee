@@ -1,2 +1,5 @@
 settings.py
+settings.pyc
 *.sqlite
+.idea
+*.iml
